@@ -42,7 +42,7 @@ from reportlab.platypus import (
 # Columnas reales del Excel cal_026
 REQUIRED_COLUMNS = [
     "Año", "Mes", "Departamento", "Municipio",
-    "Tipo de Sistema", "Almacenamiento", "Whd", "consumo",
+    "Tipo de Sistema", "Almacenamiento", "Whd",
     "IPP_base", "IPPm_1",
     "AMGCnu_m", "AMGCvi_m", "AMGCau_m", "AMGCnf_m", "AMGCro_m",
     "Inversio", "AMGCm",
