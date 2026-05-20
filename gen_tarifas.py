@@ -299,7 +299,6 @@ def build_municipality_page(
 
     param_hdrs = [
         hdr_cell("WHD\n(Wh/día)", pal),
-        hdr_cell("Consumo\n(kWh/mes)", pal),
         hdr_cell("Tipo Sistema", pal),
         hdr_cell("Almacenamiento", pal),
         hdr_cell("IPP Base\n($/kWh)", pal),
@@ -310,7 +309,6 @@ def build_municipality_page(
     for _, r in rows.iterrows():
         param_rows.append([
             val_cell(fmt_num(r["Whd"], 0), bold=True),
-            val_cell(fmt_num(r["consumo"], 2)),
             val_cell(str(r["Tipo de Sistema"])),
             val_cell(str(r["Almacenamiento"])),
             val_cell(fmt_num(r["IPP_base"], 2)),
@@ -318,8 +316,8 @@ def build_municipality_page(
             val_cell(fmt_num(r.get("Radiacion", "—"), 1) if "Radiacion" in r.index else "—"),
         ])
 
-    col_w7 = [cw / 7] * 7
-    t_params = Table(param_rows, colWidths=col_w7, repeatRows=1)
+    col_w6 = [cw / 6] * 6
+    t_params = Table(param_rows, colWidths=col_w6, repeatRows=1)
     ts = std_table_style(pal)
     ts.add("BACKGROUND", (0, 0), (-1, 0), pal["primary"])
     t_params.setStyle(ts)
@@ -557,7 +555,7 @@ def validate_excel(df: pd.DataFrame) -> list[str]:
         if nulls > 0:
             errors.append(f"⚠️ Columna '{col}' tiene {nulls} valor(es) nulo(s).")
 
-    num_cols = ["Whd", "consumo", "IPP_base", "IPPm_1", "Inversio", "AMGCm",
+    num_cols = ["Whd", "IPP_base", "IPPm_1", "Inversio", "AMGCm",
                 "Facturacion_mes", "Subsidio_mes", "Tarifa_mes", "Tarifa SIN"]
     for col in num_cols:
         try:
@@ -820,7 +818,7 @@ def main():
             st.dataframe(df, use_container_width=True, hide_index=True)
 
         with tab_params:
-            cols_p = ["Municipio", "Departamento", "Whd", "consumo",
+            cols_p = ["Municipio", "Departamento", "Whd",
                       "Tipo de Sistema", "Almacenamiento", "IPP_base", "IPPm_1"]
             st.dataframe(df[[c for c in cols_p if c in df.columns]],
                          use_container_width=True, hide_index=True)
