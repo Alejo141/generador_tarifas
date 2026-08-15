@@ -303,6 +303,7 @@ def build_municipality_page(
         hdr_cell("Almacenamiento", pal),
         hdr_cell("IPP Base\n($/kWh)", pal),
         hdr_cell("IPPm-1\n($/kWh)", pal),
+        hdr_cell("Radiación", pal),
     ]
     param_rows = [param_hdrs]
     for _, r in rows.iterrows():
@@ -312,6 +313,7 @@ def build_municipality_page(
             val_cell(str(r["Almacenamiento"])),
             val_cell(fmt_num(r["IPP_base"], 2)),
             val_cell(fmt_num(r["IPPm_1"], 2)),
+            val_cell(fmt_num(r.get("Radiacion", "—"), 1) if "Radiacion" in r.index else "—"),
         ])
 
     col_w6 = [cw / 6] * 6
@@ -365,6 +367,7 @@ def build_municipality_page(
     cu_hdrs = [
         hdr_cell("Inversión\n($/mes)", pal),
         hdr_cell("AMGCm\n($/mes)", pal),
+        hdr_cell("Facturación\nMes ($/mes)", pal),
         hdr_cell("Empresa SIN", pal),
         hdr_cell("Tarifa SIN\n($/kWh)", pal),
     ]
@@ -373,6 +376,7 @@ def build_municipality_page(
         cu_rows.append([
             val_cell(fmt_num(r["Inversio"], 2)),
             val_cell(fmt_num(r["AMGCm"], 2), bold=True),
+            val_cell(fmt_num(r["Facturacion_mes"], 2), bold=True, color=pal["secondary"]),
             val_cell(str(r["Empresa SIN"])),
             val_cell(fmt_num(r["Tarifa SIN"], 2)),
         ])
@@ -385,7 +389,7 @@ def build_municipality_page(
     story.append(t_cu)
     story.append(Spacer(1, 7))
 
-  """  # ── 8. SUBSIDIO Y TARIFA USUARIO ─────────────────────────────────────────
+    # ── 8. SUBSIDIO Y TARIFA USUARIO ─────────────────────────────────────────
     if show_subsidio:
         story.append(section_banner(
             "SUBSIDIO Y TARIFA USUARIO ($/usuario-mes)",
@@ -421,7 +425,7 @@ def build_municipality_page(
         ts4.add("FONTNAME", (1, 1), (1, -1), "Helvetica-Bold")
         t_sub.setStyle(ts4)
         story.append(t_sub)
-        story.append(Spacer(1, 7))"""
+        story.append(Spacer(1, 7))
 
     # ── 9. CAJA FÓRMULA ──────────────────────────────────────────────────────
     formula_text = (
