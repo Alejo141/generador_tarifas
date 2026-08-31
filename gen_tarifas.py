@@ -1,7 +1,7 @@
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║           DISPOWER · Generador de Tarifas ZNI                               ║
-║           Streamlit + ReportLab · Versión 2.0                               ║
+║           Streamlit + ReportLab · Versión 1.0                               ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 Requisitos:
@@ -39,15 +39,12 @@ from reportlab.platypus import (
 #  CONSTANTES Y CONFIGURACIÓN
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Columnas reales del Excel cal_026
+# Columnas obligatorias del Excel
 REQUIRED_COLUMNS = [
-    "Año", "Mes", "Departamento", "Municipio",
-    "Tipo de Sistema", "Almacenamiento", "Whd",
-    "IPP_base", "IPPm_1",
-    "AMGCnu_m", "AMGCvi_m", "AMGCau_m", "AMGCnf_m", "AMGCro_m",
-    "Inversio", "AMGCm",
-    "Facturacion_mes", "Subsidio_mes", "Tarifa_mes",
-    "Empresa SIN", "Tarifa SIN", "Porcentaje_subsidio",
+    "AÑO", "MES", "DEPARTAMENTO", "MUNICIPIO", "TIPO SISTEMA",
+    "ALMACENAMIENTO", "WHD", "IPP_0", "IPP_m-1",
+    "AMGCnu_m", "AMGCvi_m", "AMGCau_m", "AMGCnf_m", "AMGCro_m", "AMGC_m",
+    "Im", "CUm", "Comercializador SIN", "Tarifa SIN",
 ]
 
 MESES_ES = {
@@ -56,16 +53,17 @@ MESES_ES = {
     9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre",
 }
 
-PAGE_W, PAGE_H = letter
+PAGE_W, PAGE_H = letter  # 612 × 792 pts
 MARGIN = 1.8 * cm
 CONTENT_W = PAGE_W - 2 * MARGIN
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  PALETA DE COLORES
+#  PALETA DE COLORES (con soporte para colores corporativos personalizados)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def build_palette(primary: str, secondary: str, accent: str) -> dict:
+    """Construye la paleta de colores a partir de colores hexadecimales."""
     return {
         "primary":    colors.HexColor(primary),
         "secondary":  colors.HexColor(secondary),
@@ -77,7 +75,6 @@ def build_palette(primary: str, secondary: str, accent: str) -> dict:
         "text_muted": colors.HexColor("#6B7280"),
         "text_dark":  colors.HexColor("#1A202C"),
         "green":      colors.HexColor("#196B24"),
-        "purple":     colors.HexColor("#6B46C1"),
     }
 
 
@@ -89,26 +86,20 @@ DEFAULT_PALETTE = build_palette("#156082", "#E97132", "#0F9ED5")
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def fmt_num(v, decimals: int = 2) -> str:
-    """Formatea número con separadores al estilo colombiano (. miles, , decimal)."""
+    """Formatea un número con separadores de miles al estilo colombiano."""
     try:
         num = float(v)
         if decimals == 0:
             return f"{int(round(num)):,}".replace(",", ".")
         formatted = f"{num:,.{decimals}f}"
+        # Convierte coma de miles y punto decimal al español
         return formatted.replace(",", "X").replace(".", ",").replace("X", ".")
     except (ValueError, TypeError):
         return str(v)
 
 
-def fmt_pct(v) -> str:
-    """Formatea como porcentaje con 2 decimales."""
-    try:
-        return f"{float(v) * 100:.2f}%"
-    except (ValueError, TypeError):
-        return str(v)
-
-
 def p(text: str, style: ParagraphStyle) -> Paragraph:
+    """Shorthand para crear un Paragraph."""
     return Paragraph(str(text), style)
 
 
@@ -117,6 +108,7 @@ def p(text: str, style: ParagraphStyle) -> Paragraph:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def build_styles(pal: dict) -> dict:
+    """Genera el diccionario de estilos tipográficos para el PDF."""
     base = getSampleStyleSheet()
 
     def s(name, **kw) -> ParagraphStyle:
@@ -135,12 +127,20 @@ def build_styles(pal: dict) -> dict:
             fontSize=8, textColor=pal["text_dark"], fontName="Helvetica",
             alignment=TA_CENTER, leading=11),
 
+        "section_hdr": s("section_hdr",
+            fontSize=8, textColor=pal["white"], fontName="Helvetica-Bold",
+            alignment=TA_CENTER, leading=12),
+
         "tbl_hdr": s("tbl_hdr",
             fontSize=7.5, textColor=pal["white"], fontName="Helvetica-Bold",
             alignment=TA_CENTER, leading=10),
 
         "tbl_val": s("tbl_val",
             fontSize=8, textColor=pal["text_dark"], fontName="Helvetica",
+            alignment=TA_CENTER, leading=11),
+
+        "tbl_val_bold": s("tbl_val_bold",
+            fontSize=8.5, textColor=pal["text_dark"], fontName="Helvetica-Bold",
             alignment=TA_CENTER, leading=11),
 
         "footnote": s("footnote",
@@ -159,8 +159,8 @@ def build_styles(pal: dict) -> dict:
 
 def hdr_cell(text: str, pal: dict, bg_key: str = "primary") -> Paragraph:
     st = ParagraphStyle("hc", parent=getSampleStyleSheet()["Normal"],
-        fontSize=7, textColor=pal["white"], fontName="Helvetica-Bold",
-        alignment=TA_CENTER, leading=9)
+        fontSize=7.5, textColor=pal["white"], fontName="Helvetica-Bold",
+        alignment=TA_CENTER, leading=10)
     return Paragraph(text, st)
 
 
@@ -174,6 +174,7 @@ def val_cell(text: str, bold: bool = False, color=None, fs: int = 8,
 
 
 def section_banner(text: str, bg_color, content_w: float) -> Table:
+    """Barra de sección con color de fondo."""
     st = ParagraphStyle("sb", parent=getSampleStyleSheet()["Normal"],
         fontSize=8, textColor=colors.white, fontName="Helvetica-Bold",
         alignment=TA_CENTER, leading=12)
@@ -188,7 +189,8 @@ def section_banner(text: str, bg_color, content_w: float) -> Table:
     return t
 
 
-def std_table_style(pal: dict) -> TableStyle:
+def std_table_style(pal: dict, n_header_cols_alt: list = None) -> TableStyle:
+    """Estilo estándar para tablas de datos."""
     return TableStyle([
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [pal["white"], pal["light_grey"]]),
         ("GRID", (0, 0), (-1, -1), 0.5, pal["border"]),
@@ -211,14 +213,28 @@ def build_municipality_page(
     styles: dict,
     header_img_path: str | None,
     footer_img_path: str | None,
-    show_subsidio: bool = True,
+    show_subsidio: bool = False,
 ) -> list:
+    """
+    Genera la lista de Flowables de ReportLab para un municipio.
+
+    Args:
+        rows: DataFrame filtrado para un municipio.
+        pal: Paleta de colores.
+        styles: Diccionario de estilos tipográficos.
+        header_img_path: Ruta al PNG de encabezado (o None).
+        footer_img_path: Ruta al PNG de pie de página (o None).
+        show_subsidio: Si True, incluye columnas de subsidio y tarifa usuario.
+
+    Returns:
+        Lista de Flowables para añadir al story principal.
+    """
     story = []
     row0 = rows.iloc[0]
-    mun  = row0["Municipio"]
-    dept = row0["Departamento"]
-    year = int(row0["Año"])
-    mes  = MESES_ES.get(int(row0["Mes"]), str(row0["Mes"]))
+    mun  = row0["MUNICIPIO"]
+    dept = row0["DEPARTAMENTO"]
+    year = int(row0["AÑO"])
+    mes  = MESES_ES.get(int(row0["MES"]), str(row0["MES"]))
     cw   = CONTENT_W
 
     # ── 1. IMAGEN ENCABEZADO ─────────────────────────────────────────────────
@@ -229,6 +245,7 @@ def build_municipality_page(
         story.append(RLImage(header_img_path, width=cw, height=cw * ratio))
         story.append(Spacer(1, 6))
     else:
+        # Encabezado de texto si no hay imagen
         banner = Table([[
             p("⚡ DISPOWER SAS ESP", ParagraphStyle("bh",
                 fontSize=14, textColor=pal["white"], fontName="Helvetica-Bold",
@@ -301,23 +318,20 @@ def build_municipality_page(
         hdr_cell("WHD\n(Wh/día)", pal),
         hdr_cell("Tipo Sistema", pal),
         hdr_cell("Almacenamiento", pal),
-        hdr_cell("IPP Base\n($/kWh)", pal),
+        hdr_cell("IPP₀\n($/kWh)", pal),
         hdr_cell("IPPm-1\n($/kWh)", pal),
-        hdr_cell("Radiación", pal),
     ]
     param_rows = [param_hdrs]
     for _, r in rows.iterrows():
         param_rows.append([
-            val_cell(fmt_num(r["Whd"], 0), bold=True),
-            val_cell(str(r["Tipo de Sistema"])),
-            val_cell(str(r["Almacenamiento"])),
-            val_cell(fmt_num(r["IPP_base"], 2)),
-            val_cell(fmt_num(r["IPPm_1"], 2)),
-            val_cell(fmt_num(r.get("Radiacion", "—"), 1) if "Radiacion" in r.index else "—"),
+            val_cell(fmt_num(r["WHD"], 0), bold=True),
+            val_cell(r["TIPO SISTEMA"]),
+            val_cell(r["ALMACENAMIENTO"]),
+            val_cell(fmt_num(r["IPP_0"], 2)),
+            val_cell(fmt_num(r["IPP_m-1"], 2)),
         ])
 
-    col_w6 = [cw / 6] * 6
-    t_params = Table(param_rows, colWidths=col_w6, repeatRows=1)
+    t_params = Table(param_rows, colWidths=[cw / 5] * 5, repeatRows=1)
     ts = std_table_style(pal)
     ts.add("BACKGROUND", (0, 0), (-1, 0), pal["primary"])
     t_params.setStyle(ts)
@@ -326,7 +340,7 @@ def build_municipality_page(
 
     # ── 6. COMPONENTES AMGC ─────────────────────────────────────────────────
     story.append(section_banner(
-        "COMPONENTES DEL CARGO AMGC ($/usuario-mes)",
+        "COMPONENTES DEL COSTO UNITARIO — CARGO AMGC ($/usuario-mes)",
         pal["green"], cw))
     story.append(Spacer(1, 3))
 
@@ -336,7 +350,7 @@ def build_municipality_page(
         hdr_cell("AMGCau_m\nActualización", pal),
         hdr_cell("AMGCnf_m\nNo Facturación", pal),
         hdr_cell("AMGCro_m\nOtros", pal),
-        hdr_cell("AMGCm\nTOTAL", pal),
+        hdr_cell("AMGC_m\nTOTAL", pal),
     ]
     amgc_rows = [amgc_hdrs]
     for _, r in rows.iterrows():
@@ -346,7 +360,7 @@ def build_municipality_page(
             val_cell(fmt_num(r["AMGCau_m"], 2)),
             val_cell(fmt_num(r["AMGCnf_m"], 2)),
             val_cell(fmt_num(r["AMGCro_m"], 2)),
-            val_cell(fmt_num(r["AMGCm"], 2), bold=True, color=pal["dark"]),
+            val_cell(fmt_num(r["AMGC_m"], 2), bold=True, color=pal["dark"]),
         ])
 
     t_amgc = Table(amgc_rows, colWidths=[cw / 6] * 6, repeatRows=1)
@@ -358,83 +372,65 @@ def build_municipality_page(
     story.append(t_amgc)
     story.append(Spacer(1, 7))
 
-    # ── 7. INVERSIÓN Y COSTO UNITARIO ────────────────────────────────────────
+    # ── 7. COSTO UNITARIO Y TARIFAS ─────────────────────────────────────────
     story.append(section_banner(
-        "INVERSIÓN Y COSTO UNITARIO ($/usuario-mes)",
+        "COSTO UNITARIO Y TARIFA FINAL ($/usuario-mes)",
         pal["secondary"], cw))
     story.append(Spacer(1, 3))
 
-    cu_hdrs = [
-        hdr_cell("Inversión\n($/mes)", pal),
-        hdr_cell("AMGCm\n($/mes)", pal),
-        hdr_cell("Facturación\nMes ($/mes)", pal),
-        hdr_cell("Empresa SIN", pal),
-        hdr_cell("Tarifa SIN\n($/kWh)", pal),
+    # Columnas base (siempre visibles)
+    tarifa_hdrs = [
+        hdr_cell("Im\n($/mes)", pal),
+        hdr_cell("CUm\n($/usuario-mes)", pal),
+        hdr_cell("Comercializador\nSIN", pal),
+        hdr_cell("Tarifa SIN\n($/mes)", pal),
     ]
-    cu_rows = [cu_hdrs]
-    for _, r in rows.iterrows():
-        cu_rows.append([
-            val_cell(fmt_num(r["Inversio"], 2)),
-            val_cell(fmt_num(r["AMGCm"], 2), bold=True),
-            val_cell(fmt_num(r["Facturacion_mes"], 2), bold=True, color=pal["secondary"]),
-            val_cell(str(r["Empresa SIN"])),
-            val_cell(fmt_num(r["Tarifa SIN"], 2)),
-        ])
+    col_widths = [cw / 4] * 4
 
-    t_cu = Table(cu_rows, colWidths=[cw / 5] * 5, repeatRows=1)
+    # Columnas opcionales de subsidio
+    if show_subsidio:
+        tarifa_hdrs += [
+            hdr_cell("Subsidio\nAplicado", pal),
+            hdr_cell("Tarifa\nUsuario", pal),
+        ]
+        col_widths = [cw / 6] * 6
+
+    tarifa_rows = [tarifa_hdrs]
+    for _, r in rows.iterrows():
+        row_data = [
+            val_cell(fmt_num(r["Im"], 2)),
+            val_cell(fmt_num(r["CUm"], 2), bold=True, color=pal["secondary"]),
+            val_cell(str(r["Comercializador SIN"])),
+            val_cell(fmt_num(r["Tarifa SIN"], 2)),
+        ]
+        if show_subsidio:
+            cum = float(r["CUm"])
+            subsidio = max(0.0, cum - float(r["Tarifa SIN"]))
+            row_data += [
+                val_cell(fmt_num(subsidio, 2) if subsidio > 0 else "—"),
+                val_cell("$ " + fmt_num(cum, 2), bold=True, color=pal["dark"]),
+            ]
+        tarifa_rows.append(row_data)
+
+    t_tarifa = Table(tarifa_rows, colWidths=col_widths, repeatRows=1)
     ts3 = std_table_style(pal)
-    ts3.add("BACKGROUND", (0, 0), (2, 0), pal["secondary"])
-    ts3.add("BACKGROUND", (3, 0), (4, 0), pal["primary"])
-    t_cu.setStyle(ts3)
-    story.append(t_cu)
+    ts3.add("BACKGROUND", (0, 0), (1, 0), pal["secondary"])
+    ts3.add("BACKGROUND", (2, 0), (3, 0), pal["primary"])
+    if show_subsidio:
+        ts3.add("BACKGROUND", (4, 0), (4, 0), colors.HexColor("#6B46C1"))
+        ts3.add("BACKGROUND", (5, 0), (5, 0), pal["dark"])
+        ts3.add("BACKGROUND", (5, 1), (5, -1), colors.HexColor("#E8F5E9"))
+        ts3.add("FONTNAME", (5, 1), (5, -1), "Helvetica-Bold")
+    t_tarifa.setStyle(ts3)
+    story.append(t_tarifa)
     story.append(Spacer(1, 7))
 
-    # ── 8. SUBSIDIO Y TARIFA USUARIO ─────────────────────────────────────────
-    if show_subsidio:
-        story.append(section_banner(
-            "SUBSIDIO Y TARIFA USUARIO ($/usuario-mes)",
-            pal["purple"], cw))
-        story.append(Spacer(1, 3))
-
-        sub_hdrs = [
-            hdr_cell("Subsidio Mes\n($/mes)", pal),
-            hdr_cell("Tarifa Mes\n($/mes)", pal),
-            hdr_cell("% Subsidio", pal),
-            hdr_cell("Subsidio Día\n($/día)", pal),
-            hdr_cell("Tarifa Día\n($/día)", pal),
-            hdr_cell("Facturación\nDía ($/día)", pal),
-        ]
-        sub_rows = [sub_hdrs]
-        for _, r in rows.iterrows():
-            sub_rows.append([
-                val_cell(fmt_num(r["Subsidio_mes"], 2), color=pal["green"]),
-                val_cell(fmt_num(r["Tarifa_mes"], 2), bold=True, color=pal["dark"]),
-                val_cell(fmt_pct(r["Porcentaje_subsidio"]), bold=True),
-                val_cell(fmt_num(r.get("Subsidio_dia", 0), 2)),
-                val_cell(fmt_num(r.get("tarifa dia", 0), 2)),
-                val_cell(fmt_num(r.get("fact dia", 0), 2)),
-            ])
-
-        t_sub = Table(sub_rows, colWidths=[cw / 6] * 6, repeatRows=1)
-        ts4 = std_table_style(pal)
-        ts4.add("BACKGROUND", (0, 0), (0, 0), pal["green"])
-        ts4.add("BACKGROUND", (1, 0), (1, 0), pal["dark"])
-        ts4.add("BACKGROUND", (2, 0), (2, 0), pal["purple"])
-        ts4.add("BACKGROUND", (3, 0), (5, 0), pal["primary"])
-        ts4.add("BACKGROUND", (1, 1), (1, -1), colors.HexColor("#E8F5E9"))
-        ts4.add("FONTNAME", (1, 1), (1, -1), "Helvetica-Bold")
-        t_sub.setStyle(ts4)
-        story.append(t_sub)
-        story.append(Spacer(1, 7))
-
-    # ── 9. CAJA FÓRMULA ──────────────────────────────────────────────────────
+    # ── 8. CAJA FÓRMULA ──────────────────────────────────────────────────────
     formula_text = (
-        "<b>Fórmula:</b>  CU<sub>m</sub> = Inversión<sub>m</sub> + AMGC<sub>m</sub>"
+        "<b>Fórmula:</b>  CU<sub>m</sub> = I<sub>m</sub> + AMGC<sub>m</sub>"
         "&nbsp;&nbsp;·&nbsp;&nbsp;"
-        "<b>Inversión:</b> Cargo máximo de inversión &nbsp;|&nbsp;"
-        "<b>AMGCm:</b> Administración, mantenimiento y gestión comercial"
-        "&nbsp;&nbsp;·&nbsp;&nbsp;"
-        "<b>Tarifa usuario:</b> CU<sub>m</sub> – Subsidio<sub>m</sub>"
+        "<b>Im:</b> Cargo máximo de inversión &nbsp;"
+        "<b>AMGCm:</b> Cargo máximo de administración, mantenimiento y gestión comercial"
     )
     formula_box = Table([[p(formula_text, styles["formula"])]], colWidths=[cw])
     formula_box.setStyle(TableStyle([
@@ -448,7 +444,7 @@ def build_municipality_page(
     story.append(formula_box)
     story.append(Spacer(1, 5))
 
-    # ── 10. NOTA AL PIE ──────────────────────────────────────────────────────
+    # ── 9. NOTA AL PIE ───────────────────────────────────────────────────────
     story.append(p(
         f"Tarifas calculadas conforme a la Resolución CREG 101-026 de 2022 · "
         f"Departamento: {dept.upper()} · Zona No Interconectada (ZNI) · "
@@ -456,7 +452,7 @@ def build_municipality_page(
         styles["footnote"]))
     story.append(Spacer(1, 5))
 
-    # ── 11. IMAGEN PIE DE PÁGINA ─────────────────────────────────────────────
+    # ── 10. IMAGEN PIE DE PÁGINA ─────────────────────────────────────────────
     if footer_img_path:
         with PILImage.open(footer_img_path) as im:
             iw, ih = im.size
@@ -488,8 +484,22 @@ def generate_pdf(
     header_img_path: str | None = None,
     footer_img_path: str | None = None,
     municipios_filter: list | None = None,
-    show_subsidio: bool = True,
+    show_subsidio: bool = False,
 ) -> bytes:
+    """
+    Genera el PDF completo con una página por municipio.
+
+    Args:
+        df: DataFrame validado con todos los datos.
+        pal: Paleta de colores.
+        header_img_path: Ruta al PNG del encabezado.
+        footer_img_path: Ruta al PNG del pie de página.
+        municipios_filter: Lista de municipios a incluir (None = todos).
+        show_subsidio: Si True, incluye columnas de subsidio/tarifa usuario.
+
+    Returns:
+        Bytes del PDF generado.
+    """
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf,
@@ -498,11 +508,11 @@ def generate_pdf(
         topMargin=0.4 * cm, bottomMargin=0.4 * cm,
     )
     styles = build_styles(pal)
-    municipios = municipios_filter or df["Municipio"].unique().tolist()
+    municipios = municipios_filter or df["MUNICIPIO"].unique().tolist()
 
     all_story = []
     for i, mun in enumerate(municipios):
-        rows = df[df["Municipio"] == mun].reset_index(drop=True)
+        rows = df[df["MUNICIPIO"] == mun].reset_index(drop=True)
         if rows.empty:
             continue
         if i > 0:
@@ -523,8 +533,9 @@ def generate_pdf_single(
     pal: dict,
     header_img_path: str | None,
     footer_img_path: str | None,
-    show_subsidio: bool = True,
+    show_subsidio: bool = False,
 ) -> bytes:
+    """Genera un PDF para un único municipio."""
     return generate_pdf(df, pal, header_img_path, footer_img_path,
                         municipios_filter=[municipio],
                         show_subsidio=show_subsidio)
@@ -535,33 +546,44 @@ def generate_pdf_single(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def validate_excel(df: pd.DataFrame) -> list[str]:
+    """
+    Valida el DataFrame y retorna lista de errores (vacía si todo OK).
+    """
     errors = []
 
-    # Normalizar nombres de columna (strip espacios)
-    df.columns = [str(c).strip() for c in df.columns]
-
+    # 1. Columnas requeridas
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
         errors.append(f"❌ Columnas faltantes: {', '.join(missing)}")
-        return errors
 
-    empty_mun = df["Municipio"].isna().sum()
+    if errors:
+        return errors  # No continuar si faltan columnas
+
+    # 2. Municipios vacíos
+    empty_mun = df["MUNICIPIO"].isna().sum()
     if empty_mun > 0:
         errors.append(f"❌ Hay {empty_mun} fila(s) con municipio vacío.")
 
-    amgc_cols = ["AMGCnu_m", "AMGCvi_m", "AMGCau_m", "AMGCnf_m", "AMGCro_m", "AMGCm"]
+    # 3. Datos por municipio
+    for mun in df["MUNICIPIO"].dropna().unique():
+        subset = df[df["MUNICIPIO"] == mun]
+        if subset.empty:
+            errors.append(f"❌ El municipio '{mun}' no tiene datos.")
+
+    # 4. Componentes AMGC nulos
+    amgc_cols = ["AMGCnu_m", "AMGCvi_m", "AMGCau_m", "AMGCnf_m", "AMGCro_m", "AMGC_m"]
     for col in amgc_cols:
         nulls = df[col].isna().sum()
         if nulls > 0:
-            errors.append(f"⚠️ Columna '{col}' tiene {nulls} valor(es) nulo(s).")
+            errors.append(f"⚠️ El componente AMGC '{col}' tiene {nulls} valor(es) nulo(s).")
 
-    num_cols = ["Whd", "IPP_base", "IPPm_1", "Inversio", "AMGCm",
-                "Facturacion_mes", "Subsidio_mes", "Tarifa_mes", "Tarifa SIN"]
+    # 5. Valores numéricos en columnas clave
+    num_cols = ["WHD", "IPP_0", "IPP_m-1", "Im", "CUm", "Tarifa SIN"]
     for col in num_cols:
         try:
             pd.to_numeric(df[col])
         except (ValueError, TypeError):
-            errors.append(f"❌ Columna '{col}' contiene valores no numéricos.")
+            errors.append(f"❌ La columna '{col}' contiene valores no numéricos.")
 
     return errors
 
@@ -578,54 +600,140 @@ def main():
         initial_sidebar_state="expanded",
     )
 
+    # ── CSS personalizado ─────────────────────────────────────────────────────
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sora:wght@600;700&display=swap');
-        html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
+        }
         .main { background: #F8FAFC; }
 
+        /* Encabezado principal */
         .hero {
             background: linear-gradient(135deg, #0E2841 0%, #156082 60%, #0F9ED5 100%);
-            border-radius: 16px; padding: 32px 40px; margin-bottom: 28px;
+            border-radius: 16px;
+            padding: 32px 40px;
+            margin-bottom: 28px;
             box-shadow: 0 8px 32px rgba(14,40,65,0.18);
         }
-        .hero h1 { font-family:'Sora',sans-serif; font-size:2rem; font-weight:700;
-            color:white; margin:0 0 6px 0; letter-spacing:-0.5px; }
-        .hero p { color:rgba(255,255,255,0.75); font-size:0.95rem; margin:0; }
-        .hero .badge { display:inline-block; background:rgba(255,255,255,0.15);
-            color:white; border:1px solid rgba(255,255,255,0.3); border-radius:20px;
-            padding:3px 12px; font-size:0.75rem; font-weight:600; margin-bottom:12px;
-            letter-spacing:0.5px; }
+        .hero h1 {
+            font-family: 'Sora', sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+            color: white;
+            margin: 0 0 6px 0;
+            letter-spacing: -0.5px;
+        }
+        .hero p {
+            color: rgba(255,255,255,0.75);
+            font-size: 0.95rem;
+            margin: 0;
+        }
+        .hero .badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 20px;
+            padding: 3px 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            letter-spacing: 0.5px;
+        }
 
-        .card { background:white; border-radius:12px; padding:24px;
-            border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.05); margin-bottom:16px; }
-        .card-title { font-family:'Sora',sans-serif; font-size:0.9rem; font-weight:700;
-            color:#0E2841; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:16px;
-            display:flex; align-items:center; gap:8px; }
+        /* Cards de sección */
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 16px;
+        }
+        .card-title {
+            font-family: 'Sora', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: #0E2841;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
 
-        .mun-pill { display:inline-block; background:#EFF6FF; color:#156082;
-            border:1px solid #BFDBFE; border-radius:20px; padding:4px 14px;
-            font-size:0.78rem; font-weight:600; margin:3px; }
+        /* Métricas de municipios */
+        .mun-pill {
+            display: inline-block;
+            background: #EFF6FF;
+            color: #156082;
+            border: 1px solid #BFDBFE;
+            border-radius: 20px;
+            padding: 4px 14px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            margin: 3px;
+        }
 
-        .alert-error { background:#FEF2F2; border-left:4px solid #EF4444; border-radius:8px;
-            padding:12px 16px; margin:8px 0; font-size:0.85rem; color:#991B1B; }
-        .alert-success { background:#F0FDF4; border-left:4px solid #22C55E; border-radius:8px;
-            padding:12px 16px; font-size:0.85rem; color:#166534; }
+        /* Alertas */
+        .alert-error {
+            background: #FEF2F2;
+            border-left: 4px solid #EF4444;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin: 8px 0;
+            font-size: 0.85rem;
+            color: #991B1B;
+        }
+        .alert-success {
+            background: #F0FDF4;
+            border-left: 4px solid #22C55E;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 0.85rem;
+            color: #166534;
+        }
 
-        .stButton > button { border-radius:8px !important; font-weight:600 !important;
-            transition:all 0.2s ease !important; }
-        div[data-testid="stDownloadButton"] button { border-radius:8px !important; font-weight:600 !important; }
+        /* Botones */
+        .stButton > button {
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            transition: all 0.2s ease !important;
+        }
+        div[data-testid="stDownloadButton"] button {
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+        }
 
-        section[data-testid="stSidebar"] { background:#0E2841; }
-        section[data-testid="stSidebar"] * { color:white !important; }
+        /* Sidebar */
+        section[data-testid="stSidebar"] {
+            background: #0E2841;
+        }
+        section[data-testid="stSidebar"] * {
+            color: white !important;
+        }
         section[data-testid="stSidebar"] .stSelectbox label,
         section[data-testid="stSidebar"] .stCheckbox label,
         section[data-testid="stSidebar"] .stColorPicker label {
-            color:rgba(255,255,255,0.85) !important; font-size:0.85rem !important; }
+            color: rgba(255,255,255,0.85) !important;
+            font-size: 0.85rem !important;
+        }
         section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
-            color:rgba(255,255,255,0.6) !important; font-size:0.8rem !important; }
-        .sidebar-section { border-top:1px solid rgba(255,255,255,0.1); padding-top:16px; margin-top:16px; }
-        .dataframe { font-size:0.82rem !important; }
+            color: rgba(255,255,255,0.6) !important;
+            font-size: 0.8rem !important;
+        }
+        .sidebar-section {
+            border-top: 1px solid rgba(255,255,255,0.1);
+            padding-top: 16px;
+            margin-top: 16px;
+        }
+
+        /* Tabla preview */
+        .dataframe { font-size: 0.82rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -651,24 +759,27 @@ def main():
 
         st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
         st.markdown("**📄 Opciones de contenido**")
-        show_subsidio = st.checkbox("Incluir tabla de Subsidio y Tarifa Usuario", value=True)
+        show_subsidio = st.checkbox("Incluir Subsidio y Tarifa Usuario", value=False)
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
-        st.markdown("**ℹ️ Columnas requeridas en el Excel**")
+        st.markdown("**ℹ️ Columnas requeridas Excel**")
         for c in REQUIRED_COLUMNS:
             st.markdown(f"<small>· {c}</small>", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # Paleta desde los colores seleccionados
     pal = build_palette(col_primary, col_secondary, col_accent)
 
     # ── LAYOUT PRINCIPAL ─────────────────────────────────────────────────────
     col_left, col_right = st.columns([3, 2], gap="large")
 
+    # ── COLUMNA IZQUIERDA: carga de archivos ──────────────────────────────────
     with col_left:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown('<div class="card-title">📊 Archivo Excel (obligatorio)</div>',
                     unsafe_allow_html=True)
+
         excel_file = st.file_uploader(
             "Selecciona el archivo Excel con las tarifas",
             type=["xlsx", "xls"],
@@ -679,14 +790,18 @@ def main():
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown('<div class="card-title">🖼️ Plantilla gráfica (opcional)</div>',
                     unsafe_allow_html=True)
-        st.caption("Si cargas imágenes PNG/JPG se usarán como encabezado y pie de página del PDF.")
+        st.caption("Si cargas imágenes, se usarán como encabezado y pie de página del PDF.")
+
         tcol1, tcol2 = st.columns(2)
         with tcol1:
-            header_file = st.file_uploader("Encabezado (PNG/JPG)", type=["png","jpg","jpeg"], key="header")
+            header_file = st.file_uploader(
+                "Encabezado (PNG/JPG)", type=["png", "jpg", "jpeg"], key="header")
         with tcol2:
-            footer_file = st.file_uploader("Pie de página (PNG/JPG)", type=["png","jpg","jpeg"], key="footer")
+            footer_file = st.file_uploader(
+                "Pie de página (PNG/JPG)", type=["png", "jpg", "jpeg"], key="footer")
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # ── COLUMNA DERECHA: estado y acciones ────────────────────────────────────
     with col_right:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown('<div class="card-title">📋 Estado del sistema</div>',
@@ -696,6 +811,7 @@ def main():
             st.info("⬅️ Carga el archivo Excel para comenzar.")
             st.markdown('</div>', unsafe_allow_html=True)
         else:
+            # Leer Excel
             try:
                 df = pd.read_excel(excel_file)
                 df.columns = [str(c).strip() for c in df.columns]
@@ -704,26 +820,28 @@ def main():
                 st.markdown('</div>', unsafe_allow_html=True)
                 st.stop()
 
+            # Validar
             errors = validate_excel(df)
 
             if errors:
                 for err in errors:
-                    st.markdown(f'<div class="alert-error">{err}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="alert-error">{err}</div>',
+                                unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
             else:
-                municipios = df["Municipio"].dropna().unique().tolist()
-                year = int(df["Año"].iloc[0])
-                mes  = MESES_ES.get(int(df["Mes"].iloc[0]), "—")
-                dept_list = df["Departamento"].dropna().unique().tolist()
-                dept_str  = ", ".join(dept_list)
+                municipios = df["MUNICIPIO"].dropna().unique().tolist()
+                year = int(df["AÑO"].iloc[0])
+                mes  = MESES_ES.get(int(df["MES"].iloc[0]), "—")
+                dept = df["DEPARTAMENTO"].iloc[0]
 
                 st.markdown(f'<div class="alert-success">✅ Excel válido · {len(df)} filas cargadas</div>',
                             unsafe_allow_html=True)
-                st.markdown(f"**Departamento(s):** {dept_str} &nbsp;·&nbsp; **Período:** {mes} {year}")
+                st.markdown(f"**Departamento:** {dept} &nbsp; · &nbsp; **Período:** {mes} {year}")
                 st.markdown(f"**Municipios detectados ({len(municipios)}):**")
                 pills = "".join(f'<span class="mun-pill">{m}</span>' for m in municipios)
                 st.markdown(pills, unsafe_allow_html=True)
 
+                # Selector de municipios
                 st.markdown("---")
                 st.markdown("**Filtrar municipios a incluir:**")
                 selected_muns = st.multiselect(
@@ -738,6 +856,7 @@ def main():
                     st.warning("Selecciona al menos un municipio.")
                     st.stop()
 
+                # Guardar imágenes en directorio temporal compatible con Windows/Mac/Linux
                 import tempfile, pathlib
                 _tmpdir = pathlib.Path(tempfile.gettempdir())
                 header_path, footer_path = None, None
@@ -750,13 +869,15 @@ def main():
                     PILImage.open(footer_file).save(fpath, "PNG")
                     footer_path = fpath
 
+                # ── BOTONES DE GENERACIÓN ────────────────────────────────────
                 st.markdown("---")
                 st.markdown("### 📥 Descargar PDF")
 
                 btn_col1, btn_col2 = st.columns(2)
 
                 with btn_col1:
-                    if st.button("🗂️ Generar PDF completo", use_container_width=True, type="primary"):
+                    if st.button("🗂️ Generar PDF completo", use_container_width=True,
+                                 type="primary"):
                         with st.spinner("Generando PDF..."):
                             pdf_bytes = generate_pdf(
                                 df, pal,
@@ -766,10 +887,12 @@ def main():
                                 show_subsidio=show_subsidio,
                             )
                         st.session_state["pdf_bytes"] = pdf_bytes
+                        st.session_state["pdf_muns"] = selected_muns
                         st.success(f"✅ PDF generado · {len(selected_muns)} página(s)")
 
                 with btn_col2:
-                    if st.button("📦 Generar ZIP (1 PDF/municipio)", use_container_width=True):
+                    if st.button("📦 Generar ZIP (1 PDF/municipio)",
+                                 use_container_width=True):
                         with st.spinner("Generando archivos..."):
                             zip_buf = io.BytesIO()
                             with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -785,13 +908,14 @@ def main():
                             st.session_state["zip_bytes"] = zip_buf.getvalue()
                         st.success(f"✅ ZIP generado · {len(selected_muns)} archivos")
 
-                ts_now = datetime.now().strftime("%Y%m%d_%H%M")
+                # ── BOTONES DE DESCARGA ──────────────────────────────────────
+                ts = datetime.now().strftime("%Y%m%d_%H%M")
 
                 if "pdf_bytes" in st.session_state:
                     st.download_button(
                         label="⬇️ Descargar PDF completo",
                         data=st.session_state["pdf_bytes"],
-                        file_name=f"Tarifas_Dispower_{ts_now}.pdf",
+                        file_name=f"Tarifas_Dispower_{ts}.pdf",
                         mime="application/pdf",
                         use_container_width=True,
                     )
@@ -800,7 +924,7 @@ def main():
                     st.download_button(
                         label="⬇️ Descargar ZIP",
                         data=st.session_state["zip_bytes"],
-                        file_name=f"Tarifas_Dispower_ZIP_{ts_now}.zip",
+                        file_name=f"Tarifas_Dispower_ZIP_{ts}.zip",
                         mime="application/zip",
                         use_container_width=True,
                     )
@@ -810,43 +934,26 @@ def main():
         st.markdown("---")
         st.markdown("### 👁️ Vista previa de datos")
 
-        tab_all, tab_params, tab_amgc, tab_tarifa, tab_subsidio = st.tabs([
-            "📊 Todos", "⚙️ Parámetros", "🟢 AMGC", "🟠 Facturación", "💜 Subsidio"
-        ])
+        tab_all, tab_amgc, tab_tarifa = st.tabs(
+            ["📊 Todos los datos", "🟢 Componentes AMGC", "🟠 Tarifas"])
 
         with tab_all:
             st.dataframe(df, use_container_width=True, hide_index=True)
 
-        with tab_params:
-            cols_p = ["Municipio", "Departamento", "Whd",
-                      "Tipo de Sistema", "Almacenamiento", "IPP_base", "IPPm_1"]
-            st.dataframe(df[[c for c in cols_p if c in df.columns]],
-                         use_container_width=True, hide_index=True)
-
         with tab_amgc:
-            cols_a = ["Municipio", "AMGCnu_m", "AMGCvi_m", "AMGCau_m",
-                      "AMGCnf_m", "AMGCro_m", "AMGCm"]
-            amgc_view = df[[c for c in cols_a if c in df.columns]]
-            num_a = [c for c in amgc_view.columns if c != "Municipio"]
-            st.dataframe(amgc_view.style.format({c: "{:,.2f}" for c in num_a}),
-                         use_container_width=True, hide_index=True)
+            amgc_view = df[["MUNICIPIO", "AMGCnu_m", "AMGCvi_m",
+                            "AMGCau_m", "AMGCnf_m", "AMGCro_m", "AMGC_m"]]
+            st.dataframe(amgc_view.style.format({
+                c: "{:,.2f}" for c in amgc_view.columns if c != "MUNICIPIO"
+            }), use_container_width=True, hide_index=True)
 
         with tab_tarifa:
-            cols_t = ["Municipio", "Inversio", "AMGCm", "Facturacion_mes",
-                      "Empresa SIN", "Tarifa SIN"]
-            tar_view = df[[c for c in cols_t if c in df.columns]]
-            num_t = [c for c in tar_view.columns
-                     if c not in ["Municipio", "Empresa SIN"]]
-            st.dataframe(tar_view.style.format({c: "{:,.2f}" for c in num_t}),
-                         use_container_width=True, hide_index=True)
-
-        with tab_subsidio:
-            cols_s = ["Municipio", "Subsidio_mes", "Tarifa_mes",
-                      "Porcentaje_subsidio", "Subsidio_dia", "tarifa dia", "fact dia"]
-            sub_view = df[[c for c in cols_s if c in df.columns]]
-            num_s = [c for c in sub_view.columns if c != "Municipio"]
-            st.dataframe(sub_view.style.format({c: "{:,.2f}" for c in num_s}),
-                         use_container_width=True, hide_index=True)
+            tar_view = df[["MUNICIPIO", "WHD", "Im", "CUm",
+                           "Comercializador SIN", "Tarifa SIN"]]
+            st.dataframe(tar_view.style.format({
+                c: "{:,.2f}" for c in tar_view.columns
+                if c not in ["MUNICIPIO", "Comercializador SIN"]
+            }), use_container_width=True, hide_index=True)
 
 
 if __name__ == "__main__":
